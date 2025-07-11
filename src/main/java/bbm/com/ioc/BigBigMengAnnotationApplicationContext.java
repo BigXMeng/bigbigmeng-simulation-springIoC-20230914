@@ -1,16 +1,17 @@
 package bbm.com.ioc;
 
-import bbm.com.annotation.Autowired;
-import bbm.com.annotation.Component;
-import bbm.com.annotation.ComponentScan;
-import bbm.com.annotation.Scope;
+import bbm.com.annotation.*;
+import bbm.com.component.BeanPostProcessor;
+import bbm.com.component.InitializingBean;
 import org.apache.commons.lang.StringUtils;
 
 import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -25,6 +26,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @SuppressWarnings({"all"})
 public class BigBigMengAnnotationApplicationContext { // IoC容器
+
+    //将bean处理器对象 放在ArrayList
+    private List<BeanPostProcessor> beanPostProcessorList = new ArrayList<>();
 
     /**
      * IoC容器持有一个配置类的Class对象
@@ -135,6 +139,16 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
                         if(clazz.isAnnotationPresent(Component.class)) {
                             System.out.println("C IoC M beanDefinitionsByScan() -> " + classFullName + "是一个Spring bean, 将其注入IoC容器进行管理");
 
+                            /** 20230919 如果该Component实现了BeanPostProcessor接口
+                             *  则创建其对象并加入将其加入beanPostProcessorList  **/
+                            if (BeanPostProcessor.class.isAssignableFrom(clazz)) {
+                                BeanPostProcessor beanPostProcessor = (BeanPostProcessor) clazz.newInstance();
+                                beanPostProcessorList.add(beanPostProcessor);
+                                // 不需要将BeanPostProcessor的信息封装到beanDefinitionMap 也不需要放入单例池
+                                // 执行完后扫描下一个Bean进行处理
+                                continue;
+                            }
+
                             /*********** 将其信息封装到beanDefinitionMap ***********/
 
                             // 获取该class对象的@Component
@@ -182,7 +196,7 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
             // 判断该bean是singleton还是prototype 只初始化创建单例对象放入singletonObjects单例池
             if ("singleton".equalsIgnoreCase(beanDefinition.getScope())) {
                 //将该bean实例放入到singletonObjects 集合
-                Object bean = createBean(beanDefinition);
+                Object bean = createBean(beanName, beanDefinition);
                 singletonObjects.put(beanName, bean);
             }
         }
@@ -195,16 +209,13 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
      * @param beanDefinition    传入Bean的定义信息
      * @return                  返回创建的Bean对象
      */
-    private Object createBean(BeanDefinition beanDefinition) {
-        // 获取要创建的bean的Class对象 使用反射创建该对象
-        Class clazz = beanDefinition.getClazz();
+    private Object createBean(String beanName, BeanDefinition beanDefinition) {
         try {
-            // 获取构造方法并创建对象
-            Constructor constructor = clazz.getDeclaredConstructor();
-            Object bean = constructor.newInstance();
+            // 获取要创建的bean的Class对象 使用反射创建该对象
+            Object newInstance = beanDefinition.getClazz().newInstance();
 
             // 接下来创建其属性
-            for(Field field : clazz.getDeclaredFields()) {
+            for(Field field : newInstance.getClass().getDeclaredFields()) {
                 // 只有这个属性被@Autowired注解修饰 才需要被注入
                 if(field.isAnnotationPresent(Autowired.class)){
                     /* 按照名字进行组装 */
@@ -215,15 +226,43 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
 
                     // 进行组装
                     field.setAccessible(true); // 因为属性都是修饰的所以需要设置可访问
-                    field.set(bean, fieldBean);
+                    field.set(newInstance, fieldBean);
+                }
+            }
+
+            /**
+             * 调用后置处理器BeforeInitialization方法
+             */
+            for (BeanPostProcessor beanPostProcessor : beanPostProcessorList) {
+                newInstance = beanPostProcessor.postProcessBeforeInitialization(newInstance, beanName);
+            }
+
+            /**
+             * 如果 bean 实现了 InitializingBean 则执行afterPropertiesSet()方法
+             */
+            if (newInstance instanceof InitializingBean) {
+                try {
+                    ((InitializingBean) newInstance).afterPropertiesSet();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            /**
+             * 调用后置处理器AfterInitialization方法
+             * 切面类不需要执行后置处理器方法
+             */
+            if(! newInstance.getClass().isAnnotationPresent(Aspect.class)) {
+                for (BeanPostProcessor beanPostProcessor : beanPostProcessorList) {
+                    newInstance = beanPostProcessor.postProcessAfterInitialization(newInstance, beanName);
                 }
             }
 
             // 所有的属性注入完成后返回当前的Bean对象
-            return bean;
+            return newInstance;
 
         }catch (Exception e) {
-            System.out.println("不存在该构造方法");
+            e.printStackTrace();
         }
 
         // 创建失败则返回null
@@ -251,7 +290,7 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
                 Object o = singletonObjects.get(name);
                 // 如果获取不到 则先创建
                 if(o == null) {
-                    o = createBean(beanDefinition);
+                    o = createBean(name, beanDefinition);
                     // 创建后放入单例池并返回
                     singletonObjects.put(name, o);
                     return o;
@@ -260,7 +299,7 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
                 return o;
             } else {
                 // 如果是多例 则每次都使用createBean返回一个新的Bean返回
-                return createBean(beanDefinition);
+                return createBean(name, beanDefinition);
             }
         } else {
             // 不存在则抛出空指针异常

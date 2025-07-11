@@ -3,6 +3,7 @@ package bbm.com.component;
 import bbm.com.annotation.Autowired;
 import bbm.com.annotation.Component;
 import bbm.com.annotation.Scope;
+import bbm.com.annotation.TargetMethodLabel;
 
 /**
 @author Liu Xianmeng
@@ -19,6 +20,7 @@ public class DuckController {
     private DuckService duckService;
 
     // 通过鸭子的名字获取鸭子对象并返回
+    //@TargetMethodLabel
     public Duck getOneByName(String duckName) {
         System.out.println("C DuckController M getOneByName()..");
         // 使用注入的duckService属性

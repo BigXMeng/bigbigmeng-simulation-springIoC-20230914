@@ -41,7 +41,7 @@ public class BeanDefinition {
         this.scope = scope;
     }
     public Class getClazz() {
-        return clazz;
+        return this.clazz;
     }
     public void setClazz(Class clazz) {
         this.clazz = clazz;
