@@ -1,4 +1,4 @@
-package bbm.com.component;
+package bbm.com.component.business;
 
 /**
 @author Liu Xianmeng
@@ -9,7 +9,7 @@ package bbm.com.component;
 import bbm.com.annotation.Autowired;
 import bbm.com.annotation.Component;
 import bbm.com.annotation.Scope;
-import bbm.com.annotation.TargetMethodLabel;
+import bbm.com.pojo.entity.Duck;
 
 @SuppressWarnings({"all"})
 @Component(name = "duckService")

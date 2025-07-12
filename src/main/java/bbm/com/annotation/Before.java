@@ -10,8 +10,6 @@ import java.lang.annotation.Target;
 @createTime 2023/9/19 10:55
 @instruction
 */
-
-@SuppressWarnings({"all"})
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD) // @Before注解作用于方法
 public @interface Before {

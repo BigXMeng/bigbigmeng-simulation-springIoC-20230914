@@ -9,7 +9,6 @@ import java.lang.annotation.*;
              从而在包下发现Beans并装到IoC容器中
 */
 
-
 /*
 @Retention(RetentionPolicy.RUNTIME)是Java中的一个注解元注解
 它指定了被注解的元素在运行时可以通过反射被访问到

@@ -10,8 +10,6 @@ import java.lang.annotation.Target;
 @createTime 2023/9/19 10:52
 @instruction
 */
-
-@SuppressWarnings({"all"})
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE) // @Aspect注解修饰切面类
 public @interface Aspect {

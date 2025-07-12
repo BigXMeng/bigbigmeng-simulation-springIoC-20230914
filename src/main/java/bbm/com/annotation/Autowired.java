@@ -12,7 +12,6 @@ import java.lang.annotation.Target;
              这个变量对应的类对象就应该被注入到这个类中
              所谓的注入 其实就是将singletonObjects中此变量的类对象的引用赋值给这个变量
 */
-
 @SuppressWarnings({"all"})
 @Target(ElementType.FIELD) // 用于修饰变量域
 @Retention(RetentionPolicy.RUNTIME)

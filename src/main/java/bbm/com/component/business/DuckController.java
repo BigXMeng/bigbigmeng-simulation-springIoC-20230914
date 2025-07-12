@@ -1,19 +1,17 @@
-package bbm.com.component;
+package bbm.com.component.business;
 
 import bbm.com.annotation.Autowired;
 import bbm.com.annotation.Component;
 import bbm.com.annotation.Scope;
-import bbm.com.annotation.TargetMethodLabel;
+import bbm.com.pojo.entity.Duck;
 
 /**
 @author Liu Xianmeng
 @createTime 2023/9/15 0:17
 @instruction duckController将作为一个组件被放入IoC容器 名字为duckController
 */
-
-@SuppressWarnings({"all"})
-@Component(name = "duckController")
 @Scope("singleton") // 指定为单例对象
+@Component(name = "duckController")
 public class DuckController {
 
     @Autowired

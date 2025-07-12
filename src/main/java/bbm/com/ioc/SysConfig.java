@@ -9,8 +9,6 @@ import bbm.com.annotation.ComponentScan;
              IoC容器应该要扫描的包 该包下的所有被注解标识的Beans
              都会被IoC容器进行创建和管理
 */
-
-@SuppressWarnings({"all"})
 @ComponentScan(value = "bbm.com.component")
-public class BigBigMengConfig {
+public class SysConfig {
 }

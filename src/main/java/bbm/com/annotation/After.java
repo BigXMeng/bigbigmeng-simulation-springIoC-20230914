@@ -10,7 +10,6 @@ import java.lang.annotation.Target;
 @createTime 2023/9/19 11:02
 @instruction
 */
-
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
 public @interface After {

@@ -1,4 +1,4 @@
-package bbm.com.component;
+package bbm.com.component.core.define;
 
 import com.sun.istack.internal.Nullable;
 
@@ -7,8 +7,6 @@ import com.sun.istack.internal.Nullable;
 @createTime 2023/9/18 21:57
 @instruction
 */
-
-@SuppressWarnings({"all"})
 public interface BeanPostProcessor {
     @Nullable
     default Object postProcessBeforeInitialization(Object bean, String beanName) {

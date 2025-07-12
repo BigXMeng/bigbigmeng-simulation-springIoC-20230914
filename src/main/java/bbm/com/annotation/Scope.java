@@ -12,7 +12,6 @@ import java.lang.annotation.Target;
 
             singleton or prototype
 */
-
 @Target(ElementType.TYPE) // 表示@Scope用于修饰类
 // 指定保留策略 RUNTIME标识运行的时候可以通过反射检测到该注解
 @Retention(RetentionPolicy.RUNTIME)

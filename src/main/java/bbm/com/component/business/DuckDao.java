@@ -1,8 +1,10 @@
-package bbm.com.component;
+package bbm.com.component.business;
 
 import bbm.com.annotation.Component;
 import bbm.com.annotation.Scope;
 import bbm.com.annotation.TargetMethodLabel;
+import bbm.com.component.core.define.InitializingBean;
+import bbm.com.pojo.entity.Duck;
 
 import java.util.concurrent.ConcurrentHashMap;
 

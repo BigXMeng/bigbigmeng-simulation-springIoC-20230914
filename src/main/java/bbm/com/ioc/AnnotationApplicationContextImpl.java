@@ -1,12 +1,12 @@
 package bbm.com.ioc;
 
 import bbm.com.annotation.*;
-import bbm.com.component.BeanPostProcessor;
-import bbm.com.component.InitializingBean;
+import bbm.com.component.core.define.BeanPostProcessor;
+import bbm.com.component.core.define.InitializingBean;
+import bbm.com.pojo.enumeration.BeanScopeEnum;
 import org.apache.commons.lang.StringUtils;
 
 import java.io.File;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.net.URL;
 import java.util.ArrayList;
@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 */
 
 @SuppressWarnings({"all"})
-public class BigBigMengAnnotationApplicationContext { // IoC容器
+public class AnnotationApplicationContextImpl { // IoC容器
 
     //将bean处理器对象 放在ArrayList
     private List<BeanPostProcessor> beanPostProcessorList = new ArrayList<>();
@@ -84,7 +84,7 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
      * @param configClass 在创建一个IoC容器对象的时候 需要传入配置类的Class对象
      *                    配置类的Class对象 上文已经提到 IoC容器
      */
-    public BigBigMengAnnotationApplicationContext(Class configClass) {
+    public AnnotationApplicationContextImpl(Class configClass) {
         this.configClass = configClass;
         beanDefinitionsByScan(this.configClass);
         initialSingletonObjects();
@@ -108,7 +108,7 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
         /*********** 根据类加载器获取要扫描的资源 ***********/
 
         // 获取类加载器
-        ClassLoader classLoader = BigBigMengAnnotationApplicationContext.class.getClassLoader();
+        ClassLoader classLoader = AnnotationApplicationContextImpl.class.getClassLoader();
         // 通过类的加载器获取到要扫描的包的资源
         String path = packageName.replace(".", "/");
         URL resource = classLoader.getResource(path);
@@ -118,67 +118,57 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
 
         // 获取指定包所在的包文件夹
         File file = new File(resource.getFile());
-        // 遍历文件夹下所有的文件
-        if(file.isDirectory()) {
-            File[] files = file.listFiles();
-            for(File subFile : files) {
-                // 获取此subFile的全路径
-                String absolutePath = subFile.getAbsolutePath();
-                // 只处理.class文件
-                if(absolutePath.endsWith(".class")) {
-                    // 获取类名 注意这里的类并不一定需要注入 还需要判断它是否被@Component、@Service、@Mapper等注解修饰
-                    String className = absolutePath.substring(absolutePath.lastIndexOf("\\") + 1, absolutePath.indexOf(".class"));
-                    // 获取全类名
-                    String classFullName = packageName + "." + className;
+        // 扫描此文件夹
+        scanDirectory(file, packageName, classLoader);
+    }
 
-                    try{
-                        // 获取classFullName对应的class对象
-                        Class<?> clazz = classLoader.loadClass(classFullName);
-                        // 判断该class对象是否被@Component、@Service、@Mapper等注解修饰
-                        // 我在模拟实现的过程中只定义了一个标识Bean的注解 即@Component
-                        if(clazz.isAnnotationPresent(Component.class)) {
-                            System.out.println("C IoC M beanDefinitionsByScan() -> " + classFullName + "是一个Spring bean, 将其注入IoC容器进行管理");
+    private void scanDirectory(File directory, String packageName, ClassLoader classLoader) {
+        File[] files = directory.listFiles();
+        if (files == null) return;
 
-                            /** 20230919 如果该Component实现了BeanPostProcessor接口
-                             *  则创建其对象并加入将其加入beanPostProcessorList  **/
-                            if (BeanPostProcessor.class.isAssignableFrom(clazz)) {
-                                BeanPostProcessor beanPostProcessor = (BeanPostProcessor) clazz.newInstance();
-                                beanPostProcessorList.add(beanPostProcessor);
-                                // 不需要将BeanPostProcessor的信息封装到beanDefinitionMap 也不需要放入单例池
-                                // 执行完后扫描下一个Bean进行处理
-                                continue;
-                            }
-
-                            /*********** 将其信息封装到beanDefinitionMap ***********/
-
-                            // 获取该class对象的@Component
-                            Component componentAnnotation = clazz.getDeclaredAnnotation(Component.class);
-                            // 获取该bean的名字
-                            String beanName = componentAnnotation.name();
-                            if ("".equals(beanName)) { // 如果没有配置名字
-                                // 则将该类的类名首字母小写作为beanName
-                                beanName = StringUtils.uncapitalize(className);
-                            }
-                            // 将Bean的信息封装到BeanDefinition对象
-                            BeanDefinition beanDefinition = new BeanDefinition();
-                            beanDefinition.setClazz(clazz);
-                            // 获取@Scope并设置beanDefinition对象的scope信息
-                            if(clazz.isAnnotationPresent(Scope.class)) {
-                                Scope scope = clazz.getDeclaredAnnotation(Scope.class);
-                                beanDefinition.setScope(scope.value());
-                            } else {
-                                beanDefinition.setScope("singleton");
-                            }
-                            // 将beanDefinition放入beanDefinitionMap
-                            beanDefinitionMap.put(beanName, beanDefinition);
-                        } else {
-                            System.out.println("C IoC M beanDefinitionsByScan() -> " + classFullName + "不是一个Spring bean 不需要注入IoC容器进行管理");
-                        }
-                    }catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
+        for (File file : files) {
+            if (file.isDirectory()) {
+                // 递归处理子目录：包名追加子目录名
+                scanDirectory(file, packageName + "." + file.getName(), classLoader);
+            } else if (file.getName().endsWith(".class")) {
+                // 处理.class文件：直接从文件名获取类名（不含.class后缀）
+                String className = file.getName().substring(0, file.getName().length() - 6);
+                processClass(packageName + "." + className, classLoader);
             }
+        }
+    }
+
+    private void processClass(String classFullName, ClassLoader classLoader) {
+        try {
+            Class<?> clazz = classLoader.loadClass(classFullName);
+
+            if (clazz.isAnnotationPresent(Component.class)) {
+                System.out.println("C IoC M beanDefinitionsByScan() -> 找到 Spring bean: " + classFullName);
+
+                /** 20230919 如果该Component实现了BeanPostProcessor接口
+                 *  则创建其对象并加入将其加入beanPostProcessorList  **/
+                if (BeanPostProcessor.class.isAssignableFrom(clazz)) {
+                    BeanPostProcessor processor = (BeanPostProcessor) clazz.getDeclaredConstructor().newInstance();
+                    beanPostProcessorList.add(processor);
+                    return;
+                }
+
+                // 创建BeanDefinition
+                BeanDefinition beanDefinition = new BeanDefinition();
+                beanDefinition.setClazz(clazz);
+                beanDefinition.setScope(clazz.isAnnotationPresent(Scope.class) ?
+                        clazz.getDeclaredAnnotation(Scope.class).value() : "singleton");
+
+                // 获取Bean名称
+                Component comp = clazz.getDeclaredAnnotation(Component.class);
+                String beanName = comp.name().isEmpty() ?
+                        StringUtils.uncapitalize(clazz.getSimpleName()) : comp.name();
+
+                beanDefinitionMap.put(beanName, beanDefinition);
+            }
+        } catch (Exception e) {
+            System.err.println("C IoC M beanDefinitionsByScan() -> Failed to process class: " + classFullName);
+            e.printStackTrace();
         }
     }
 
@@ -194,7 +184,7 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
             // 通过beanName 得到对应的beanDefinition对象
             BeanDefinition beanDefinition = beanDefinitionMap.get(beanName);
             // 判断该bean是singleton还是prototype 只初始化创建单例对象放入singletonObjects单例池
-            if ("singleton".equalsIgnoreCase(beanDefinition.getScope())) {
+            if (BeanScopeEnum.SINGLETON.getCode().equalsIgnoreCase(beanDefinition.getScope())) {
                 //将该bean实例放入到singletonObjects 集合
                 Object bean = createBean(beanName, beanDefinition);
                 singletonObjects.put(beanName, bean);
@@ -220,12 +210,10 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
                 if(field.isAnnotationPresent(Autowired.class)){
                     /* 按照名字进行组装 */
                     String name = field.getName();
-
                     // 通过getBean方法来获取要组装对象
                     Object fieldBean = getBean(name);
-
-                    // 进行组装
-                    field.setAccessible(true); // 因为属性都是修饰的所以需要设置可访问
+                    // 进行组装 因为属性都是修饰的所以需要设置可访问
+                    field.setAccessible(true);
                     field.set(newInstance, fieldBean);
                 }
             }
@@ -285,7 +273,7 @@ public class BigBigMengAnnotationApplicationContext { // IoC容器
             // 存在则获取该bean的定义信息
             BeanDefinition beanDefinition = beanDefinitionMap.get(name);
             // 然后判断是该bean的Scope是单例还是多例
-            if("singleton".equals(beanDefinition.getScope())) {
+            if(BeanScopeEnum.SINGLETON.getCode().equals(beanDefinition.getScope())) {
                 // 如果是单例 则直接从单例池获取
                 Object o = singletonObjects.get(name);
                 // 如果获取不到 则先创建

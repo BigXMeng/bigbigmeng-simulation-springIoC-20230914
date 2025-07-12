@@ -1,39 +1,43 @@
-package bbm.com.component;
+package bbm.com.component.core.impl;
 
 import bbm.com.annotation.*;
+import bbm.com.component.aspect.BusinessAspect;
+import bbm.com.component.core.define.BeanPostProcessor;
+import lombok.Data;
 import net.sf.cglib.proxy.Enhancer;
 import net.sf.cglib.proxy.MethodInterceptor;
 import net.sf.cglib.proxy.MethodProxy;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
 @author Liu Xianmeng
 @createTime 2023/9/18 22:00
-@instruction BigBigMengBeanPostProcessor 具有实际功能的后置处理器
+@instruction BeanPostProcessorImpl 具有实际功能的后置处理器
 */
-
-@SuppressWarnings({"all"})
+@Data
 @Component // 后置处理器也是一个Bean 交给IoC容器进行管理
-public class BigBigMengBeanPostProcessor implements BeanPostProcessor {
+public class BeanPostProcessorImpl implements BeanPostProcessor {
 
     /**
      * 注入切面对象 以调用其切面方法
      */
     @Autowired
-    private BigBigMengAspect bigBigMengAspect;
+    private BusinessAspect businessAspect;
 
     @Override
     public Object postProcessBeforeInitialization(Object bean, String beanName) {
         // 添加一句日志 表示此方法被执行 打印出当前处理的bean
-        System.out.println("C BigBigMengBeanPostProcessor M postProcessBeforeInitialization -> bean = " + bean);
+        System.out.println("C BeanPostProcessorImpl M postProcessBeforeInitialization -> bean = " + bean);
         return bean; // 处理后返回这个bean
     }
+
     @Override
     public Object postProcessAfterInitialization(Object bean, String beanName) {
         // 添加一句日志 表示此方法被执行 打印出当前处理的bean
-        System.out.println("C BigBigMengBeanPostProcessor M postProcessAfterInitialization -> bean = " + bean);
+        System.out.println("C BeanPostProcessorImpl M postProcessAfterInitialization -> bean = " + bean);
         // 反射获取bean的所有方法并遍历 如果发现方法有@TargetMethodLabel修饰
         // 则创建代理对象执行目标方法 在目标方法执行的前后切入切面类的方法
         Method[] declaredMethods = bean.getClass().getDeclaredMethods();
@@ -65,29 +69,29 @@ public class BigBigMengBeanPostProcessor implements BeanPostProcessor {
                         /*** 如果被代理的DuckDao对象要执行的方法名 === declaredMethod.getName() 则对原目标方法进行增强 ***/
                         if(method.getName().equals(declaredMethod.getName())) {
                             /**
-                             * 判断并执行BigBigMengAspect的@Before修饰的方法 对原目标方法进行增强
+                             * 判断并执行BusinessAspect的@Before修饰的方法 对原目标方法进行增强
                              *
                              * 因为我只写了一个Aspect类 所以将其注入到BigBigMengBeanPostProcessor后
-                             * 只需要判断这一个bigBigMengAspect切面类对象 如果有更多的切面类对象 则应该放在集合中进行管理 遍历处理
+                             * 只需要判断这一个BusinessAspect切面类对象 如果有更多的切面类对象 则应该放在集合中进行管理 遍历处理
                              */
-                            if(BigBigMengAspect.class
+                            if(BusinessAspect.class
                                 .getDeclaredMethod("beforeAdvice", Object.class)
                                 .getDeclaredAnnotation(Before.class).value()
                                 .equals("@annotation(targetMethodLabel)")){
 
-                                bigBigMengAspect.beforeAdvice(bean);
+                                businessAspect.beforeAdvice(bean);
                             }
 
                             // 🎯执行目标方法 由代理对象执行
                             resultValue = methodProxy.invokeSuper(o, objects);
 
-                            // 执行BigBigMengAspect的@After修饰的方法
-                            if(BigBigMengAspect.class
+                            // 执行BusinessAspect的@After修饰的方法
+                            if(BusinessAspect.class
                                 .getDeclaredMethod("afterAdvice", Object.class)
                                 .getDeclaredAnnotation(After.class).value()
                                 .equals("@annotation(targetMethodLabel)")){
 
-                                bigBigMengAspect.afterAdvice(bean);
+                                businessAspect.afterAdvice(bean);
                             }
                         }
                         // 返回method方法执行的返回值
@@ -97,7 +101,7 @@ public class BigBigMengBeanPostProcessor implements BeanPostProcessor {
                 enhancer.setCallback(interceptor);
                 // 返回代理对象
                 Object proxy = enhancer.create();
-                System.out.println("C BigBigMengBeanPostProcessor M postProcessAfterInitialization() proxy = " + proxy.getClass());
+                System.out.println("C BeanPostProcessorImpl M postProcessAfterInitialization() proxy = " + proxy.getClass());
                 return proxy;
             }
         }
