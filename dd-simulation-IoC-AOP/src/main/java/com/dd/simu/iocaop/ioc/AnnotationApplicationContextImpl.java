@@ -1,0 +1,297 @@
+package com.dd.simu.iocaop.ioc;
+
+import com.dd.simu.iocaop.annotation.*;
+import com.dd.simu.iocaop.component.core.define.BeanPostProcessor;
+import com.dd.simu.iocaop.component.core.define.InitializingBean;
+import com.dd.simu.iocaop.pojo.enumeration.BeanScopeEnum;
+import org.apache.commons.lang.StringUtils;
+
+import java.io.File;
+import java.lang.reflect.Field;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+@author Liu Xianmeng
+@createTime 2023/9/14 17:27
+@instruction IoC容器类 这个类就是要模拟实现额IoC容器类
+            下面将BigBigMengAnnotationApplicationContext的类名简称为 "IoC容器"
+
+            【说明】在注释中如果出现前文未出现的名词 (如对于 private Class configClass; 的注释中出现singletonObjects)
+                   可以在后文中找到
+*/
+
+@SuppressWarnings({"all"})
+public class AnnotationApplicationContextImpl { // IoC容器
+
+    //将bean处理器对象 放在ArrayList
+    private List<BeanPostProcessor> beanPostProcessorList = new ArrayList<>();
+
+    /**
+     * IoC容器持有一个配置类的Class对象
+     *
+     * 这个类的定义如下:
+     * @ComponentScan(value = "IoC容器要扫描的包名")
+     * public class BigBigMengSpringConfig {}
+     *
+     * [IoC容器注入Bean]
+     * 这个类的@ComponentScan注解的value指定IoC容器要扫描的包 IoC容器会使用反射获取这个类的@ComponentScan注解
+     * 然后将 value = "IoC容器要扫描的包名" -> 包名取出 然后扫描包中所有的Class对象
+     * 如果扫描到到的Class对象有类似@Component、@Bean、@Mapper、@Service、@Controller等标识这个Class对象是一个
+     * 组件的注解修饰 就创建一个此Class对象对应的Java类对象 并放入singletonObjects
+     *
+     * [IoC容器注入Bean的依赖Bean]
+     * 在扫描到一个Class对象后 不仅要创建该Class对象对应的Java类对象 还需要扫描其所有的属性 如果其某个属性A有
+     *  @Autowire @Resource等标识 则该属性A应该被注入到该当前创建的Java对象 如果singletonObjects已经存在该属性A对象
+     * 则直接从singletonObjects中取出相应的Java对象并将引用赋值给该属性A 如果singletonObjects还不存在该属性A对象
+     * 则创建对应的A属性Java对象放入singletonObjects 并将此Java对象的引用赋值给属性A 这样就完成了属性的依赖注入
+     *
+     * 直到配置类指定的包中的所有的Class对象都被创建并放入singletonObjects 整个包扫描的过程就完成了
+     */
+    private Class configClass;
+
+    /**
+     * 定义属性BeanDefinitionMap -> 存放BeanDefinition对象
+     *
+     * IoC容器中有一个变量域/也称为属性 叫beanDefinitionMap 这个map用来保存Bean的定义信息
+     * 为什么要存储Bean的定义信息？因为在创建Bean的时候要用到
+     * 也就是说IoC容器会先扫描1遍配置类指定的包获取所有Bean的定义信息
+     * 然后遍历beanDefinitionMap创建所有的Bean放入singletonObjects
+     *
+     * beanDefinitionMap是ConcurrentHashMap的一个对象 键是Bean的名字 值是Bean的定义信息
+     * Bean的定义信息由BeanDefinition类的对象来充当
+     */
+    private ConcurrentHashMap<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>();
+
+    /**
+     * 定义属性SingletonObjects -> 存放单例对象
+     *
+     * singletonObjects就是我上面提到的存放单例对象的变量 在上文已经出现过
+     * 它也是一个ConcurrentHashMap对象 键是Bean的名字 值是Bean对象本身
+     */
+    private ConcurrentHashMap<String, Object> singletonObjects = new ConcurrentHashMap<>();
+
+    /**
+     * 接下来是IoC容器的构造器
+     *
+     * 构造器中完成两个任务
+     * （1）初始化Beans的定义信息beanDefinitionMap
+     * （2）遍历Beans的定义信息beanDefinitionMap初始化单例池singletonObjects
+     *
+     * @param configClass 在创建一个IoC容器对象的时候 需要传入配置类的Class对象
+     *                    配置类的Class对象 上文已经提到 IoC容器
+     */
+    public AnnotationApplicationContextImpl(Class configClass) {
+        this.configClass = configClass;
+        beanDefinitionsByScan(this.configClass);
+        initialSingletonObjects();
+    }
+
+    /**
+     * beanDefinitionsByScan方法完成对指定包的扫描 并将Bean信息封装到beanDefinitionMap
+     */
+    public void beanDefinitionsByScan(Class configClass) {
+
+        /*********** 获取要扫描的包 ***********/
+
+        // 首先先获取配置类的注解
+        ComponentScan scanAnnotation =
+            (ComponentScan) this.configClass.getDeclaredAnnotation(ComponentScan.class);
+        // 然后通过componentScan的value值获取要扫描的包
+        // value()是ComponentScan注解的一个属性 带括号显得有些别扭 但这是注解的规范
+        String packageName = scanAnnotation.value();
+        System.out.println("C IoC M beanDefinitionsByScan() -> IoC要扫描的包 = " + packageName);
+
+        /*********** 根据类加载器获取要扫描的资源 ***********/
+
+        // 获取类加载器
+        ClassLoader classLoader = AnnotationApplicationContextImpl.class.getClassLoader();
+        // 通过类的加载器获取到要扫描的包的资源
+        String path = packageName.replace(".", "/");
+        URL resource = classLoader.getResource(path);
+        System.out.println("C IoC M beanDefinitionsByScan() -> 包的完整路径 =" + resource);
+
+        /*********** 遍历指定包下的所有文件 找出.class结尾的文件 将其信息封装到beanDefinitionMap ***********/
+
+        // 获取指定包所在的包文件夹
+        File file = new File(resource.getFile());
+        // 扫描此文件夹
+        scanDirectory(file, packageName, classLoader);
+    }
+
+    private void scanDirectory(File directory, String packageName, ClassLoader classLoader) {
+        File[] files = directory.listFiles();
+        if (files == null) return;
+
+        for (File file : files) {
+            if (file.isDirectory()) {
+                // 递归处理子目录：包名追加子目录名
+                scanDirectory(file, packageName + "." + file.getName(), classLoader);
+            } else if (file.getName().endsWith(".class")) {
+                // 处理.class文件：直接从文件名获取类名（不含.class后缀）
+                String className = file.getName().substring(0, file.getName().length() - 6);
+                processClass(packageName + "." + className, classLoader);
+            }
+        }
+    }
+
+    private void processClass(String classFullName, ClassLoader classLoader) {
+        try {
+            Class<?> clazz = classLoader.loadClass(classFullName);
+
+            if (clazz.isAnnotationPresent(Component.class)) {
+                System.out.println("C IoC M beanDefinitionsByScan() -> 找到 Spring bean: " + classFullName);
+
+                /** 20230919 如果该Component实现了BeanPostProcessor接口
+                 *  则创建其对象并加入将其加入beanPostProcessorList  **/
+                if (BeanPostProcessor.class.isAssignableFrom(clazz)) {
+                    BeanPostProcessor processor = (BeanPostProcessor) clazz.getDeclaredConstructor().newInstance();
+                    beanPostProcessorList.add(processor);
+                    return;
+                }
+
+                // 创建BeanDefinition
+                BeanDefinition beanDefinition = new BeanDefinition();
+                beanDefinition.setClazz(clazz);
+                beanDefinition.setScope(clazz.isAnnotationPresent(Scope.class) ?
+                        clazz.getDeclaredAnnotation(Scope.class).value() : "singleton");
+
+                // 获取Bean名称
+                Component comp = clazz.getDeclaredAnnotation(Component.class);
+                String beanName = comp.name().isEmpty() ?
+                        StringUtils.uncapitalize(clazz.getSimpleName()) : comp.name();
+
+                beanDefinitionMap.put(beanName, beanDefinition);
+            }
+        } catch (Exception e) {
+            System.err.println("C IoC M beanDefinitionsByScan() -> Failed to process class: " + classFullName);
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * initialSingletonObjects方法beanDefinitionMap单例池的初始化
+     */
+    public void initialSingletonObjects(){
+        // 获取所有beans的定义信息keys
+        Enumeration<String> keys = beanDefinitionMap.keys();
+        while (keys.hasMoreElements()) {
+            // 得到beanName
+            String beanName = keys.nextElement();
+            // 通过beanName 得到对应的beanDefinition对象
+            BeanDefinition beanDefinition = beanDefinitionMap.get(beanName);
+            // 判断该bean是singleton还是prototype 只初始化创建单例对象放入singletonObjects单例池
+            if (BeanScopeEnum.SINGLETON.getCode().equalsIgnoreCase(beanDefinition.getScope())) {
+                //将该bean实例放入到singletonObjects 集合
+                Object bean = createBean(beanName, beanDefinition);
+                singletonObjects.put(beanName, bean);
+            }
+        }
+    }
+
+    /**
+     * createBean方法完成Bean对象的创建
+     *
+     * @param beanName          传入Bean的名字(目前用不到这个看参数 这个参数会在实现AOP的时候用到)
+     * @param beanDefinition    传入Bean的定义信息
+     * @return                  返回创建的Bean对象
+     */
+    private Object createBean(String beanName, BeanDefinition beanDefinition) {
+        try {
+            // 获取要创建的bean的Class对象 使用反射创建该对象
+            Object newInstance = beanDefinition.getClazz().newInstance();
+
+            // 接下来创建其属性
+            for(Field field : newInstance.getClass().getDeclaredFields()) {
+                // 只有这个属性被@Autowired注解修饰 才需要被注入
+                if(field.isAnnotationPresent(Autowired.class)){
+                    /* 按照名字进行组装 */
+                    String name = field.getName();
+                    // 通过getBean方法来获取要组装对象
+                    Object fieldBean = getBean(name);
+                    // 进行组装 因为属性都是修饰的所以需要设置可访问
+                    field.setAccessible(true);
+                    field.set(newInstance, fieldBean);
+                }
+            }
+
+            /**
+             * 调用后置处理器BeforeInitialization方法
+             */
+            for (BeanPostProcessor beanPostProcessor : beanPostProcessorList) {
+                newInstance = beanPostProcessor.postProcessBeforeInitialization(newInstance, beanName);
+            }
+
+            /**
+             * 如果 bean 实现了 InitializingBean 则执行afterPropertiesSet()方法
+             */
+            if (newInstance instanceof InitializingBean) {
+                try {
+                    ((InitializingBean) newInstance).afterPropertiesSet();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            /**
+             * 调用后置处理器AfterInitialization方法
+             * 切面类不需要执行后置处理器方法
+             */
+            if(! newInstance.getClass().isAnnotationPresent(Aspect.class)) {
+                for (BeanPostProcessor beanPostProcessor : beanPostProcessorList) {
+                    newInstance = beanPostProcessor.postProcessAfterInitialization(newInstance, beanName);
+                }
+            }
+
+            // 所有的属性注入完成后返回当前的Bean对象
+            return newInstance;
+
+        }catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        // 创建失败则返回null
+        return null;
+    }
+
+    /**
+     * getBean 根据传入的Bean的name返回singletonObjects中的bean对象
+     *
+     * 这个方法会在给Bean注入属性对象的时候用到 注入属性对象的时候
+     * 先检查singletonObjects中是否已经存在要注入的Bean 如果已经存在则直接取出用
+     * 如果还未创建 则创建一个属性对象的Bean放入singletonObjects并将其引用赋值给要注入的属性
+     *
+     * @param   name
+     * @return  返回singletonObjects中的bean对象
+     */
+    public Object getBean(String name) {
+        // 先判断该name是否存在于beanDefinitionMap的KEYS当中
+        if(beanDefinitionMap.containsKey(name)) {
+            // 存在则获取该bean的定义信息
+            BeanDefinition beanDefinition = beanDefinitionMap.get(name);
+            // 然后判断是该bean的Scope是单例还是多例
+            if(BeanScopeEnum.SINGLETON.getCode().equals(beanDefinition.getScope())) {
+                // 如果是单例 则直接从单例池获取
+                Object o = singletonObjects.get(name);
+                // 如果获取不到 则先创建
+                if(o == null) {
+                    o = createBean(name, beanDefinition);
+                    // 创建后放入单例池并返回
+                    singletonObjects.put(name, o);
+                    return o;
+                }
+                // 不为空则直接返回
+                return o;
+            } else {
+                // 如果是多例 则每次都使用createBean返回一个新的Bean返回
+                return createBean(name, beanDefinition);
+            }
+        } else {
+            // 不存在则抛出空指针异常
+            throw new NullPointerException("该Bean不存在");
+        }
+    }
+}
